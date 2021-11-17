@@ -52,8 +52,8 @@ class TargetSim:
         perception = StaticPerception(self.targets, delta, mcov)
         return self.raw_sim(h, t_window, perception)
 
-    def q_sampling_sim(self, h, t_window, delta, mcov):
-        perception = QPerception(self.targets, delta, mcov)
+    def q_sampling_sim(self, h, t_window, covariance_graph):
+        perception = QPerception(self.targets, covariance_graph)
         return self.raw_sim(h, t_window, perception)
 
 

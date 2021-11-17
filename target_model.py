@@ -25,7 +25,7 @@ class MultiTarget:
 class Target:
     def __init__(self, order, ws_dim, pcov):
 
-        self.integration_points = 100
+        self.integration_points = 10
         self.n_deltas = 0
         self.deltas = []
         self.Ad = []
@@ -111,13 +111,13 @@ class Target:
             self.mcovs_chol.append(np.linalg.cholesky(mcov))
 
     def transition_matrices(self, latency):
-        Ad = expm(self.A*latency)
+        Ad = self.expm(self.A*latency)
         n = self.integration_points
         t = np.linspace(0, latency, n)
         dt = latency/float(n)
         Wd = np.zeros(Ad.shape)
         for i, ti in enumerate(t):
-            Adt = expm(self.A*ti)
+            Adt = self.expm(self.A*ti)
             Wd = Wd + Adt @ self.B @ self.pcov @ self.B.T @ Adt.T
         Wd = Wd*dt
         return Ad, Wd
@@ -127,4 +127,11 @@ class Target:
         z = z + self.mcovs_chol[mode] @ np.random.randn(z.shape[0], 1)
         return z
 
+
+    def expm(self, M, nilpotent=True):
+        if nilpotent:
+            EM = np.eye(M.shape[1]) + M
+        else:
+            EM = expm(M)
+        return EM
 

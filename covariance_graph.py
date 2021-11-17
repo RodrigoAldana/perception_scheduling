@@ -3,6 +3,7 @@ from target_kalman import Kalman
 from utils import ProgressBar, save_object
 from tictoc import tic, toc
 
+
 class CovarianceGraph:
     def __init__(self, target, step, bound):
         self.target = target
@@ -29,6 +30,11 @@ class CovarianceGraph:
                     self.G[q].options.append(q_mode)
                     if ~self.is_pos_semi_def(P_mode_q):
                         self.extra_states.append({'q': q, 'mode': mode, 'Pq': P_mode})
+                    Ad, Wd = self.target.Ad[mode], self.target.Wd[mode]
+                    J = np.trace(Ad @ Pq @ Ad.T + Wd)*self.target.deltas[mode]
+                    self.G[q].costs.append(J)
+
+
 
         progress = ProgressBar('Correcting spurious', len(self.extra_states))
         self.max_patch_distance = -np.Inf
@@ -50,9 +56,6 @@ class CovarianceGraph:
         for index, key in enumerate(self.G.keys()):
             node = self.G[key]
             node.index = index
-
-
-
 
     def quantize(self, P):
         Pq = np.clip(P, -self.bound, self.bound)
@@ -89,78 +92,82 @@ class CovarianceGraph:
         Pq.resize((self.ss_dim,self.ss_dim))
         return Pq
 
-    def save_graph(self, name='graph'):
-        save_object(self, name)
+    def save_graph(self, name='graph', folder=''):
+        save_object(self, folder+'/'+name)
 
-    def dp_search(self, q0, Tf, r_pen, lambda_a):
+    def dp_search(self, q0, Tf, r_pen, lambda_a, heuristic=False, silent=True):
         q0 = self.G[q0].index
-        deltas = self.target.deltas
-        amax = int(Tf / np.min(deltas))
+        min_delta = min(self.target.deltas)
+        steps = np.floor(np.array(self.target.deltas)/min_delta)
+        deltas = min_delta*steps
+        amax = int(Tf / min_delta)
         Qd = len(self.G)
         MQ = np.zeros((Qd, amax + 1))
         MP = np.zeros((Qd, amax + 1))
         MJ = np.inf*np.ones((Qd, amax+1))
-        MT = np.zeros((Qd, amax + 1))
-        Ma = amax*np.ones(Qd)
+        MK = np.zeros((Qd, amax + 1))
 
         MJ[q0, 0] = 0
 
-        progress = ProgressBar('Computing DP matrices', amax, interval=5)
-        for k in range(1, amax+1):
+        progress = ProgressBar('Computing DP matrices', amax, interval=5, silent=silent)
+        for k in range(0, amax+1):
             progress.print_progress(k)
-            if k == 1:
-                V = range(q0, q0+1)
-            else:
-                V = range(0, Qd)
-
-            for q in V:
+            for q in range(0, Qd):
                 qreal = list(self.G.keys())[q]
                 Pq = self.G[qreal].Pq
                 Nq = self.G[qreal].options
-                for p in range(0, len(Nq)):
+                if heuristic and self.G[qreal].preferred_scheduling != -1:
+                    p = self.G[qreal].preferred_scheduling
+                    p_range = range(p, p+1)
+                else:
+                    p_range = range(0, len(Nq))
+                for p in p_range:
                     qp = Nq[p]
                     qp = self.G[qp].index
-                    tau = MT[q, k-1]
+                    tau = k*min_delta
                     tau_plus = tau + deltas[p]
+                    tau_plus = (k + steps[p])*min_delta
                     Tmax = np.min((tau_plus, Tf))
                     if(tau_plus < Tf):
-                        Ad, Wd = self.target.Ad[p], self.target.Wd[p]
+                        J = self.G[qreal].costs[p]
                     else:
                         Ad, Wd = self.target.transition_matrices(Tmax - tau)
-                    J = np.trace(Ad @ Pq @ Ad.T + Wd)*(Tmax - tau)
+                        J = np.trace(Ad @ Pq @ Ad.T + Wd)*(Tmax - tau)
                     J = (J + lambda_a*r_pen[p])/Tf
-                    if MJ[q, k-1] + J < MJ[qp, k]:
-                        MJ[qp, k] = MJ[q, k-1] + J
-                        MQ[qp, k] = q
-                        MT[qp, k] = Tmax
-                        MP[qp, k] = p
-                        ap = int(Ma[qp])
-                        if tau_plus >= Tf and MJ[qp, k] < MJ[qp, ap]:
-                            Ma[qp] = k
-        print(MJ)
-        J_opt = np.inf
-        for q in range(0, Qd):
-            a = int(Ma[q])
-            if MJ[q, a] < J_opt:
-                J_opt = MJ[q, a]
-                q_opt = q
-                a_opt = a
-        k = a_opt
-        traj_opt = [q_opt]
+                    k_next = int(min(amax, k + steps[p]))
+                    if MJ[q, k] + J < MJ[qp, k_next]:
+                        MJ[qp, k_next] = MJ[q, k] + J
+                        MQ[qp, k_next] = q
+                        MP[qp, k_next] = p
+                        MK[qp, k_next] = k
+        J_opt = np.Inf
+        q = 0
+        for qp in range(0, Qd):
+            if MJ[qp, amax] < J_opt:
+                q = qp
+                J_opt = MJ[qp, amax]
+
+        q_opt = [q]
         p_opt = []
-        while k > 0:
-            p_opt.append(int(MP[q_opt, k]))
-            q_opt = int(MQ[q_opt, k])
-            traj_opt.append(q_opt)
-            k = k - 1
-        traj_opt = traj_opt[::-1]  # Flip q_opt
-        p_opt = p_opt[::-1]  # Flip p_opt
+        k = int(amax)
+        while k != 0:
+            q_opt.append(int(MQ[q, k]))
+            p_opt.append(int(MP[q, k]))
+            k = int(MK[q, k])
+            q = q_opt[-1]
 
-        keys = list(self.G.keys())
-        print(traj_opt)
-        print(keys)
+        p_opt = p_opt[::-1]
+        q_opt = q_opt[::-1]
+        return p_opt, q_opt, J_opt
 
-        return p_opt, J_opt
+    def fill_preferred_schedules(self, Tf, r_pen, lambda_a, heuristic=False):
+        progress = ProgressBar('Filling schedules', len(list(self.G.keys())), interval=0.1)
+        for index, key in enumerate(list(self.G.keys())):
+            progress.print_progress(current=index)
+            p_opt, _, _ = self.dp_search(q0=key, Tf=Tf, r_pen=r_pen, lambda_a=lambda_a, heuristic=heuristic)
+            self.G[key].preferred_scheduling = p_opt[0]
+            # print(("Preferred schedule:", p_opt[0]))
+            # print(self.G[key].Pq)
 
     def cost_of_schedule(self, schedule, q0, Tf, r_pen, lambda_a):
         q = q0
@@ -169,7 +176,7 @@ class CovarianceGraph:
         tau = 0
         finish = False
         for i, p in enumerate(schedule):
-            print((p, J, q))
+            # print((p, J, q))
             Pq = self.G[q].Pq
             tau_plus = tau + deltas[p]
             Tmax = np.min((tau_plus, Tf))
@@ -191,12 +198,13 @@ class CovarianceGraph:
         return J
 
 
-
 class CovarianceNode:
     def __init__(self, Pq):
         self.Pq = Pq
         self.options = []
         self.index = 0
+        self.preferred_scheduling = -1
+        self.costs = []
 
 
 

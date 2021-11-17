@@ -34,7 +34,7 @@ class StaticPerception(DefaultPerception):
             self.filters.append(kalman_filter)
         self.perception_mode = 0
 
-    def schedule(self, timer, measurements):
+    def schedule(self, timer, real_measurements):
         pass
 
     def timer_handle(self, timer, real_measurements=None):
@@ -64,9 +64,24 @@ class StaticPerception(DefaultPerception):
 
 
 class QPerception(StaticPerception):
-    def __init__(self, targets, deltas, mcovs):
+    def __init__(self, targets, covariance_graph):
+        deltas = covariance_graph.target.deltas
+        mcovs = covariance_graph.target.mcovs
         super().__init__(targets, deltas, mcovs)
+        self.covariance_graph = covariance_graph
 
-    def schedule(self, timer, measurements):
-        pass
+    def schedule(self, timer, real_measurements):
+        P = self.filters[0].P
+        disturbance = 0.5*np.random.randn(P.shape[0], P.shape[1])
+        P = P + disturbance.T @ disturbance
+        Pq, q = self.covariance_graph.quantize(P)
+        if q not in self.covariance_graph.G:
+            distance = np.Inf
+            for qp, node in self.covariance_graph.G.items():
+                d = np.sqrt(np.sum(np.abs(P - node.Pq)))
+                if d < distance:
+                    distance = d
+                    q = qp
+        self.perception_mode = self.covariance_graph.G[q].preferred_scheduling
+        print(self.perception_mode,end='')
 

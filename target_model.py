@@ -30,6 +30,8 @@ class Target:
         self.deltas = []
         self.Ad = []
         self.Wd = []
+        self.Ad_steps = []
+        self.Wd_steps = []
         self.mcovs = []
         self.mcovs_chol = []
 
@@ -95,6 +97,7 @@ class Target:
         self.n_deltas = len(deltas)
         self.deltas = deltas
         self.Ad = []
+        self.Wd = []
         self.mcovs = []
         self.mcovs_chol = []
         for i, latency in enumerate(deltas):
@@ -109,6 +112,17 @@ class Target:
                     mcov = np.diag(mcov)
             self.mcovs.append(mcov)
             self.mcovs_chol.append(np.linalg.cholesky(mcov))
+
+        min_delta = np.min(deltas)
+        max_steps = int(np.round(np.max(deltas)/min_delta))
+        self.Ad_steps = []
+        self.Wd_steps = []
+
+        for i in range(1, max_steps+1):
+            Ad, Wd = self.transition_matrices(i*min_delta)
+            self.Ad_steps.append(Ad)
+            self.Wd_steps.append(Wd)
+
 
     def transition_matrices(self, latency):
         Ad = self.expm(self.A*latency)

@@ -2,7 +2,9 @@ import pickle
 from datetime import datetime
 
 
-def save_object(object, name):
+def save_object(object, name, folder=None):
+    if folder is not None:
+        name = folder+'/'+name
     file_handler = open(name+datetime.now().strftime("%m_%d_%Y-%H_%M_%S"), 'wb')
     pickle.dump(object, file_handler)
 

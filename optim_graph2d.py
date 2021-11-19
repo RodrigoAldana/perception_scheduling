@@ -14,36 +14,36 @@ mt.add_target(number=1, order=2, ws_dim=1, pcov=pcov)
 mt.set_random_x0()
 mt.set_latency(deltas, mcovs)
 
-cg = CovarianceGraph(mt.targets[0], step=0.2, bound=2, exhaustive=False, n_samples=50)
+cg = CovarianceGraph(mt.targets[0], step=0.2, bound=2, exhaustive=False, n_samples=200)
 
-P0 = np.array([[0.9, 0.1], [0.1, 0.9]])
+P0 = np.array([[0.9, 0.2], [0.2, 0.9]])
 P0, q0 = cg.closest(P0)
 
 pen = np.array([1, 1])
 lambda_a = 0.1
+N_schedules = 100
+Tf = 1
 
-tic()
-p, q, J = cg.dp_search(q0=q0, Tf=1, r_pen=pen, lambda_a=lambda_a, silent=False)
-toc()
+p, q, J = cg.dp_search_2d(q0=(q0, q0), Tf=Tf, r_pen=pen, lambda_a=lambda_a, silent=False)
 
-tic()
-p, q, J = cg.dp_search_2d(q0=(q0, q0), Tf=1, r_pen=pen, lambda_a=lambda_a, silent=False)
-toc()
-
-print((p, J))
-
-Jpg = cg.cost_of_schedule_2d(schedule=p, q0=(q0, q0), Tf=1, r_pen=pen, lambda_a=lambda_a)
-Jprg = cg.real_cost_of_schedule_2d(schedule=p, q0=(q0, q0), Tf=1, r_pen=pen, lambda_a=lambda_a)
-print((Jpg, Jprg))
+print('\n\n\n\n\n\n\n\n')
+print(p)
+Jpg = cg.cost_of_schedule_2d(schedule=p, q0=(q0, q0), Tf=Tf, r_pen=pen, lambda_a=lambda_a)
+Jprg = cg.real_cost_of_schedule_2d(schedule=p, q0=(q0, q0), Tf=Tf, r_pen=pen, lambda_a=lambda_a)
 
 costs = []
-for i in range(0, 10):
+for i in range(0, N_schedules):
     p = list(np.random.randint(low=0, high=2, size=12))
-    Jp = cg.cost_of_schedule_2d(schedule=p, q0=(q0, q0), Tf=1, r_pen=pen, lambda_a=lambda_a)
-    Jpr = cg.real_cost_of_schedule_2d(schedule=p, q0=(q0, q0), Tf=1, r_pen=pen, lambda_a=lambda_a)
+    Jpr = cg.real_cost_of_schedule_2d(schedule=p, q0=(q0, q0), Tf=Tf, r_pen=pen, lambda_a=lambda_a)
     costs.append(Jpr)
-
 costs = np.array(costs)
-print((Jprg, costs.min(), costs.mean()))
 
+J0 = cg.real_cost_of_schedule_2d(schedule=[0], q0=(q0, q0), Tf=Tf, r_pen=pen, lambda_a=lambda_a)
+J1 = cg.real_cost_of_schedule_2d(schedule=[1], q0=(q0, q0), Tf=Tf, r_pen=pen, lambda_a=lambda_a)
 
+print(('Quantized cost', Jpg))
+print(('Real cost', Jprg))
+print(('Minimum random cost', costs.min()))
+print(('Average random cost', costs.mean()))
+print(('Cost of 0', J0))
+print(('Cost of 1', J1))

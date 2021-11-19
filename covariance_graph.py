@@ -18,7 +18,7 @@ class CovarianceGraph:
         self.G = dict()
         self.extra_states = []
         self.max_trials = max_trials
-        self.preferred_schedules = dict()
+        self.preferred_schedules = {-1: {-1: 0}}
         self.min_delta = min(self.target.deltas)
         self.delta_steps = np.floor(np.array(self.target.deltas)/self.min_delta).astype(int)-1
         self.deltas = self.min_delta*self.delta_steps
@@ -297,6 +297,7 @@ class CovarianceGraph:
 
         p_opt = p_opt[::-1]
         q_opt = q_opt[::-1]
+        self.preferred_schedules[q0[0]] = {q0[1]: p_opt[0]}
         return p_opt, q_opt, J_opt
 
     def fill_preferred_schedules(self, Tf, r_pen, lambda_a, heuristic=False):
@@ -307,6 +308,15 @@ class CovarianceGraph:
             self.G[key].preferred_scheduling = p_opt[0]
             # print(("Preferred schedule:", p_opt[0]))
             # print(self.G[key].Pq)
+
+    def fill_preferred_schedules_2d(self, Tf, r_pen, lambda_a, heuristic=False):
+        progress = ProgressBar('Filling schedules', len(list(self.G.keys()))*len(list(self.G.keys())), interval=0.1)
+        c = 0
+        for keyx in (list(self.G.keys())):
+            for keyy in (list(self.G.keys())):
+                c = c + 1
+                progress.print_progress(current=c)
+                self.dp_search_2d(q0=(keyx, keyy), Tf=1, r_pen=r_pen, lambda_a=lambda_a, silent=False)
 
     def cost_of_schedule(self, schedule, q0, Tf, r_pen, lambda_a):
         q = q0

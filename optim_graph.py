@@ -20,9 +20,7 @@ mt.set_latency(deltas, mcovs)
 
 cg = CovarianceGraph(mt.targets[0], step=0.1, bound=1)
 
-
-
-P0 = np.array([[0.9, 0.2], [0.2, 0.9]])
+P0 = np.array([[0.9, 0.1], [0.1, 0.9]])
 P0, q0 = cg.quantize(P0)
 
 pen = np.array([1, 1])
